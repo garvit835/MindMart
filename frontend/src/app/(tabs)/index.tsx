@@ -1,23 +1,50 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { useAuthStore } from '../../store/authStore';
+import { supabase } from '../../lib/supabase';
 
 export default function HomeDashboard() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   
-  // Display email username or "Guest" if none
+  const [profile, setProfile] = useState<{ xp: number, level: number } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchProfile = async () => {
+    if (user?.id) {
+      const { data } = await supabase.from('profiles').select('xp, level').eq('id', user.id).single();
+      if (data) setProfile(data);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, [user]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchProfile();
+    setRefreshing(false);
+  };
+
   const displayName = user?.email?.split('@')[0] || 'Friend';
+  const xp = profile?.xp || 0;
+  const level = profile?.level || 1;
+  const xpForNextLevel = level * 200;
+  const progressPercent = Math.min((xp / xpForNextLevel) * 100, 100);
 
   return (
     <ScreenWrapper>
-      <ScrollView contentContainerStyle={{ padding: 24 }}>
+      <ScrollView 
+        contentContainerStyle={{ padding: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         
         {/* Header Section */}
-        <View className="mb-8 flex-row justify-between items-center">
+        <View className="mb-6 flex-row justify-between items-center">
           <View>
             <Text className="text-gray-500 dark:text-gray-400 text-base mb-1">Good morning,</Text>
             <Text className="text-3xl font-bold text-text-light dark:text-text-dark capitalize">
@@ -30,6 +57,23 @@ export default function HomeDashboard() {
           >
             <Feather name="user" size={24} color="#2DD4BF" />
           </TouchableOpacity>
+        </View>
+
+        {/* Level & XP Progress Card */}
+        <View className="bg-white dark:bg-surface-dark p-5 rounded-2xl mb-8 border border-gray-100 dark:border-gray-800 shadow-sm">
+          <View className="flex-row justify-between items-center mb-3">
+            <View className="flex-row items-center">
+              <Feather name="star" size={20} color="#F59E0B" />
+              <Text className="ml-2 font-bold text-lg text-text-light dark:text-text-dark">Level {level}</Text>
+            </View>
+            <Text className="text-gray-500 text-sm font-medium">{xp} / {xpForNextLevel} XP</Text>
+          </View>
+          <View className="h-3 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <View 
+              className="h-full bg-amber-400 rounded-full" 
+              style={{ width: `${progressPercent}%` }} 
+            />
+          </View>
         </View>
 
         {/* Daily Quote / Mood Card */}

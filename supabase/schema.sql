@@ -103,3 +103,62 @@ CREATE POLICY "Users can manage own notifications." ON public.notifications FOR 
 -- Storage buckets setup (conceptual, done in dashboard normally)
 -- insert into storage.buckets (id, name) values ('avatars', 'avatars');
 -- insert into storage.buckets (id, name) values ('product-images', 'product-images');
+
+-- Phase 2 Updates: Wellness & Gamification
+
+-- Update Profiles with Gamification
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS xp INTEGER DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS level INTEGER DEFAULT 1;
+
+-- 8. AI Recommendations
+CREATE TABLE public.ai_recommendations (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  mood_log_id UUID REFERENCES public.mood_logs(id) ON DELETE SET NULL,
+  tasks JSONB NOT NULL,
+  message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.ai_recommendations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own ai_recommendations." ON public.ai_recommendations FOR ALL USING (auth.uid() = user_id);
+
+-- 9. Task Completions
+CREATE TABLE public.task_completions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  task_id UUID REFERENCES public.wellness_tasks(id) ON DELETE CASCADE,
+  task_title TEXT NOT NULL,
+  xp_awarded INTEGER DEFAULT 0,
+  coins_awarded INTEGER DEFAULT 0,
+  completed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.task_completions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own task completions." ON public.task_completions FOR ALL USING (auth.uid() = user_id);
+
+-- 10. XP Logs
+CREATE TABLE public.xp_logs (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  amount INTEGER NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.xp_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own xp_logs." ON public.xp_logs FOR SELECT USING (auth.uid() = user_id);
+
+-- 11. Reward Transactions
+CREATE TABLE public.reward_transactions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  amount NUMERIC NOT NULL,
+  transaction_type TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.reward_transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own reward_transactions." ON public.reward_transactions FOR SELECT USING (auth.uid() = user_id);
+
