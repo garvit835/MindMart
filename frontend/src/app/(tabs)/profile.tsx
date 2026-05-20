@@ -23,7 +23,7 @@ export default function Profile() {
     if (pData) setProfile(pData);
 
     // Fetch Mood History for basic analytics
-    const { data: mData } = await supabase.from('mood_logs').select('mood_score, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(7);
+    const { data: mData } = await supabase.from('mood_logs').select('mood_score, logged_at').eq('user_id', user.id).order('logged_at', { ascending: false }).limit(7);
     if (mData) setMoodLogs(mData);
   };
 

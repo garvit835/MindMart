@@ -23,9 +23,9 @@ router.post('/analyze-behavior', async (req, res) => {
 
     const { data: moods } = await supabase
       .from('mood_logs')
-      .select('mood_score, note, created_at')
+      .select('mood_score, note, logged_at')
       .eq('user_id', userId)
-      .gte('created_at', sevenDaysAgo.toISOString());
+      .gte('logged_at', sevenDaysAgo.toISOString());
 
     const { data: tasks } = await supabase
       .from('task_completions')

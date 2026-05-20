@@ -18,13 +18,14 @@ export default function InsightsDashboard() {
 
   useEffect(() => {
     const init = async () => {
+      if (!user?.id) return;
       await Promise.all([
         fetchOrGenerateInsight(),
         fetchMoodLogs()
       ]);
     };
     init();
-  }, []);
+  }, [user?.id]);
 
   const fetchMoodLogs = async () => {
     if (user?.id) {
@@ -32,7 +33,7 @@ export default function InsightsDashboard() {
         .from('mood_logs')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+        .order('logged_at', { ascending: false })
         .limit(7);
       if (data) setMoodLogs(data);
     }
@@ -172,7 +173,7 @@ export default function InsightsDashboard() {
                       </View>
                     </View>
                     <Text className="text-[8px] text-gray-400 mt-2 text-center" style={{ width: 45 }} numberOfLines={1}>
-                      {new Date(log.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      {new Date(log.logged_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                     </Text>
                   </View>
                 ))}
