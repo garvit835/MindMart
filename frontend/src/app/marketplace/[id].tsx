@@ -17,6 +17,8 @@ export default function ProductDetails() {
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
 
+  const [balance, setBalance] = useState(0);
+
   useEffect(() => {
     const fetchProduct = async () => {
       const { data } = await supabase.from('products').select('*').eq('id', id).single();
@@ -26,8 +28,33 @@ export default function ProductDetails() {
     if (id) fetchProduct();
   }, [id]);
 
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('reward_transactions')
+        .select('amount, transaction_type')
+        .eq('user_id', user.id);
+      if (data) {
+        let calcBalance = 0;
+        data.forEach(tx => {
+          if (tx.transaction_type === 'earned') calcBalance += tx.amount;
+          if (tx.transaction_type === 'spent') calcBalance -= tx.amount;
+        });
+        setBalance(calcBalance);
+      }
+    };
+    fetchBalance();
+  }, [user]);
+
   const handleCheckout = async () => {
     if (!user || !product) return;
+    
+    if (balance < product.price_in_mindcoins) {
+      Alert.alert("Insufficient Balance", `You need ${product.price_in_mindcoins - balance} more MindCoins to redeem this.`);
+      return;
+    }
+
     setCheckingOut(true);
 
     try {
@@ -36,7 +63,7 @@ export default function ProductDetails() {
         userId: user.id,
         items: [{
           productId: product.id,
-          sellerId: product.seller_id, // Assuming this exists or falls back securely on backend
+          sellerId: product.seller_id,
           quantity: 1,
           priceInMindCoins: product.price_in_mindcoins
         }]
@@ -111,10 +138,10 @@ export default function ProductDetails() {
       {/* Floating Checkout Button */}
       <View className="absolute bottom-0 w-full p-6 bg-white dark:bg-background-dark border-t border-gray-100 dark:border-gray-800">
         <Button 
-          title="Redeem with MindCoins" 
+          title={balance < product.price_in_mindcoins ? "Insufficient Coins" : "Redeem with MindCoins"} 
           onPress={handleCheckout} 
           isLoading={checkingOut}
-          disabled={product.stock <= 0}
+          disabled={product.stock <= 0 || balance < product.price_in_mindcoins}
         />
       </View>
     </ScreenWrapper>

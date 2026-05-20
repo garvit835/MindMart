@@ -65,16 +65,22 @@ router.post('/analyze-behavior', async (req, res) => {
       await supabase.from('ai_activity_logs').insert([{ user_id: userId, action_type: 'crisis_detected', details: 'Triggered by /analyze-behavior' }]);
     }
 
-    // Save Insight
-    const { data: insight } = await supabase.from('behavioral_insights').insert([{
+    const newInsight = {
       user_id: userId,
       period_start: sevenDaysAgo.toISOString(),
       period_end: new Date().toISOString(),
       emotional_trend: result.emotional_trend,
       personalized_plan: result.personalized_plan
-    }]).select().single();
+    };
 
-    res.json({ success: true, insight, crisis_mode: result.crisis_mode });
+    // Save Insight
+    const { data: insight, error: insertError } = await supabase.from('behavioral_insights').insert([newInsight]).select().single();
+
+    if (insertError) {
+      console.error('Supabase Insert Error:', insertError);
+    }
+
+    res.json({ success: true, insight: insight || newInsight, crisis_mode: result.crisis_mode });
 
   } catch (error: any) {
     console.error('Analyze Error:', error);
