@@ -342,3 +342,49 @@ CREATE POLICY "Users can view challenge participants." ON public.challenge_parti
 CREATE POLICY "Users can join challenges." ON public.challenge_participants FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update own progress." ON public.challenge_participants FOR UPDATE USING (auth.uid() = user_id);
 
+
+-- Phase 5 Updates: AI Personalization & Safety Ecosystem
+
+-- Modify Profiles with Trust & Crisis Flags
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS trust_score INTEGER DEFAULT 100;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS crisis_mode BOOLEAN DEFAULT false;
+
+-- 24. Behavioral Insights
+CREATE TABLE public.behavioral_insights (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  period_start TIMESTAMP WITH TIME ZONE NOT NULL,
+  period_end TIMESTAMP WITH TIME ZONE NOT NULL,
+  emotional_trend TEXT,
+  personalized_plan JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.behavioral_insights ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own insights." ON public.behavioral_insights FOR SELECT USING (auth.uid() = user_id);
+
+-- 25. Abuse Flags
+CREATE TABLE public.abuse_flags (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  reason TEXT NOT NULL,
+  severity TEXT DEFAULT 'low',
+  trust_penalty INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.abuse_flags ENABLE ROW LEVEL SECURITY;
+-- Usually only admins can view abuse flags
+
+-- 26. AI Activity Logs
+CREATE TABLE public.ai_activity_logs (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  action_type TEXT NOT NULL, -- 'reward_scaled', 'crisis_detected', etc.
+  details TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.ai_activity_logs ENABLE ROW LEVEL SECURITY;
+
