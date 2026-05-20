@@ -13,6 +13,7 @@ app.use(express.json());
 
 import wellnessRoutes from './routes/wellness';
 import marketplaceRoutes from './routes/marketplace';
+import socialRoutes from './routes/social';
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
@@ -20,6 +21,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 app.use('/api/wellness', wellnessRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/social', socialRoutes);
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'MindMart backend is running' });

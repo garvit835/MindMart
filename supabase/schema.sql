@@ -242,3 +242,103 @@ CREATE TABLE public.reports (
 ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can insert reports." ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 
+
+-- Phase 4 Updates: Social Wellness Community
+
+-- 17. Wellness Groups
+CREATE TABLE public.wellness_groups (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT DEFAULT 'general',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.wellness_groups ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Everyone can view wellness_groups." ON public.wellness_groups FOR SELECT USING (true);
+
+-- 18. Group Members
+CREATE TABLE public.group_members (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  group_id UUID REFERENCES public.wellness_groups(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  joined_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(group_id, user_id)
+);
+
+ALTER TABLE public.group_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view group members." ON public.group_members FOR SELECT USING (true);
+CREATE POLICY "Users can join groups." ON public.group_members FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can leave groups." ON public.group_members FOR DELETE USING (auth.uid() = user_id);
+
+-- 19. Social Posts
+CREATE TABLE public.social_posts (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  group_id UUID REFERENCES public.wellness_groups(id) ON DELETE CASCADE, -- NULL means global feed
+  content TEXT NOT NULL,
+  is_anonymous BOOLEAN DEFAULT false,
+  status TEXT DEFAULT 'pending_review', -- pending_review, active, rejected
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.social_posts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Everyone can view active posts." ON public.social_posts FOR SELECT USING (status = 'active' OR auth.uid() = user_id);
+CREATE POLICY "Users can insert own posts." ON public.social_posts FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 20. Post Reactions (Only positive allowed)
+CREATE TABLE public.post_reactions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  post_id UUID REFERENCES public.social_posts(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  reaction_type TEXT CHECK (reaction_type IN ('support', 'inspired', 'proud', 'calming', 'relatable')) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(post_id, user_id, reaction_type)
+);
+
+ALTER TABLE public.post_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Everyone can view reactions." ON public.post_reactions FOR SELECT USING (true);
+CREATE POLICY "Users can add reactions." ON public.post_reactions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can remove own reactions." ON public.post_reactions FOR DELETE USING (auth.uid() = user_id);
+
+-- 21. Comments
+CREATE TABLE public.comments (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  post_id UUID REFERENCES public.social_posts(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  status TEXT DEFAULT 'pending_review',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Everyone can view active comments." ON public.comments FOR SELECT USING (status = 'active' OR auth.uid() = user_id);
+CREATE POLICY "Users can insert own comments." ON public.comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 22. Challenges
+CREATE TABLE public.challenges (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  duration_days INTEGER DEFAULT 7,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.challenges ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Everyone can view challenges." ON public.challenges FOR SELECT USING (true);
+
+-- 23. Challenge Participants
+CREATE TABLE public.challenge_participants (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  challenge_id UUID REFERENCES public.challenges(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  progress INTEGER DEFAULT 0, -- percent or raw count
+  joined_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(challenge_id, user_id)
+);
+
+ALTER TABLE public.challenge_participants ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view challenge participants." ON public.challenge_participants FOR SELECT USING (true);
+CREATE POLICY "Users can join challenges." ON public.challenge_participants FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own progress." ON public.challenge_participants FOR UPDATE USING (auth.uid() = user_id);
+
