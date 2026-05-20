@@ -162,3 +162,83 @@ CREATE TABLE public.reward_transactions (
 ALTER TABLE public.reward_transactions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own reward_transactions." ON public.reward_transactions FOR SELECT USING (auth.uid() = user_id);
 
+
+-- Phase 3 Updates: Marketplace Ecosystem
+
+-- 12. Sellers
+CREATE TABLE public.sellers (
+  id UUID REFERENCES public.profiles(id) ON DELETE CASCADE PRIMARY KEY,
+  shop_name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  is_verified BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.sellers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Everyone can view sellers." ON public.sellers FOR SELECT USING (true);
+CREATE POLICY "Users can manage own seller profile." ON public.sellers FOR ALL USING (auth.uid() = id);
+
+-- Modify Products Table (Phase 1 existing, expanding it)
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'eco-friendly';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS price_in_mindcoins INTEGER NOT NULL DEFAULT 50;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_trending BOOLEAN DEFAULT false;
+-- Price column exists from Phase 1, but we use price_in_mindcoins for virtual checkout
+
+-- 13. Orders
+CREATE TABLE public.orders (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  buyer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  total_cost_coins INTEGER NOT NULL,
+  status TEXT DEFAULT 'processing', -- processing, shipped, delivered, cancelled
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own orders." ON public.orders FOR SELECT USING (auth.uid() = buyer_id);
+-- Sellers also need to view orders (handled via backend/admin or complex RLS, assuming basic for now)
+
+-- 14. Order Items
+CREATE TABLE public.order_items (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE NOT NULL,
+  product_id UUID REFERENCES public.products(id) ON DELETE SET NULL,
+  seller_id UUID REFERENCES public.sellers(id) ON DELETE CASCADE NOT NULL,
+  quantity INTEGER DEFAULT 1,
+  price_at_time INTEGER NOT NULL
+);
+
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own order items." ON public.order_items FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.orders WHERE id = order_id AND buyer_id = auth.uid())
+);
+CREATE POLICY "Sellers can view own sold items." ON public.order_items FOR SELECT USING (auth.uid() = seller_id);
+
+-- 15. Product Reviews
+CREATE TABLE public.product_reviews (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  product_id UUID REFERENCES public.products(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5) NOT NULL,
+  comment TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.product_reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Reviews are viewable by everyone." ON public.product_reviews FOR SELECT USING (true);
+CREATE POLICY "Users can write reviews." ON public.product_reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 16. Reports (Moderation)
+CREATE TABLE public.reports (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  reporter_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  reported_type TEXT NOT NULL, -- 'product', 'seller', 'review'
+  reported_id UUID NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can insert reports." ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+

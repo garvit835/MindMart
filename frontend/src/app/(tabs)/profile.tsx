@@ -92,6 +92,35 @@ export default function Profile() {
           ))}
         </View>
 
+        {/* Wallet & Seller Nav */}
+        <View className="mb-8">
+          <TouchableOpacity 
+            onPress={() => router.push('/wallet')}
+            className="bg-white dark:bg-surface-dark p-4 rounded-2xl mb-3 flex-row items-center justify-between border border-gray-100 dark:border-gray-800"
+          >
+            <View className="flex-row items-center">
+              <View className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-full items-center justify-center mr-3">
+                <Feather name="credit-card" size={20} color="#F59E0B" />
+              </View>
+              <Text className="font-bold text-text-light dark:text-text-dark text-base">MindCoin Wallet</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#94A3B8" />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => router.push('/seller')}
+            className="bg-white dark:bg-surface-dark p-4 rounded-2xl flex-row items-center justify-between border border-gray-100 dark:border-gray-800"
+          >
+            <View className="flex-row items-center">
+              <View className="w-10 h-10 bg-primary/20 rounded-full items-center justify-center mr-3">
+                <Feather name="shopping-bag" size={20} color="#2DD4BF" />
+              </View>
+              <Text className="font-bold text-text-light dark:text-text-dark text-base">Seller Hub</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
         {/* Analytics Summary */}
         <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Recent Moods</Text>
         <View className="bg-white dark:bg-surface-dark p-4 rounded-2xl mb-8 border border-gray-100 dark:border-gray-800">
