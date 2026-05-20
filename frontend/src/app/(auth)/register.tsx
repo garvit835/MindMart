@@ -41,9 +41,23 @@ export default function Register() {
       if (profileError) {
         console.error('Profile creation error:', profileError.message);
       }
+
+      // Add a dynamic 100 MindCoin welcome bonus transaction
+      const { error: welcomeTxError } = await supabase.from('reward_transactions').insert([
+        {
+          user_id: data.user.id,
+          amount: 100,
+          transaction_type: 'earned',
+          description: 'Welcome Bonus 🌿'
+        }
+      ]);
+
+      if (welcomeTxError) {
+        console.error('Welcome bonus creation error:', welcomeTxError.message);
+      }
       
-      Alert.alert('Success', 'Check your email to verify your account!');
-      router.replace('/(auth)/login');
+      Alert.alert('Success', 'Account created successfully! Welcome to MindMart.');
+      router.replace('/(auth)/onboarding');
     }
     setLoading(false);
   }

@@ -5,6 +5,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import axios from 'axios';
 
 const MOODS = [
@@ -18,15 +20,18 @@ const MOODS = [
 
 export default function Wellness() {
   const user = useAuthStore(state => state.user);
+  const router = useRouter();
   const [selectedMood, setSelectedMood] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiTasks, setAiTasks] = useState<any[]>([]);
   const [aiMessage, setAiMessage] = useState('');
+  const [completedTasks, setCompletedTasks] = useState<any[]>([]);
 
   // Fetch recent tasks on load
   useEffect(() => {
     if (user) {
+      // 1. Fetch latest recommendations
       supabase
         .from('ai_recommendations')
         .select('*')
@@ -35,12 +40,27 @@ export default function Wellness() {
         .limit(1)
         .then(({ data }) => {
           if (data && data.length > 0) {
-            setAiTasks(data[0].tasks);
-            setAiMessage(data[0].message);
+            setAiTasks(data[0].tasks || []);
+            setAiMessage(data[0].message || '');
           }
         });
+
+      // 2. Fetch completed tasks history
+      fetchCompletedTasks();
     }
   }, [user]);
+
+  const fetchCompletedTasks = async () => {
+    if (user) {
+      const { data } = await supabase
+        .from('task_completions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (data) setCompletedTasks(data);
+    }
+  };
 
   const logMood = async () => {
     if (!selectedMood) {
@@ -62,7 +82,6 @@ export default function Wellness() {
       if (moodError) throw moodError;
 
       // 2. Fetch AI Recommendations
-      // In a real app, use full backend URL from process.env, mocking local for now
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       const response = await axios.post(`${backendUrl}/api/wellness/recommend`, {
         userId: user?.id,
@@ -100,8 +119,10 @@ export default function Wellness() {
           msg += `\n\n🎉 You leveled up!`;
         }
         Alert.alert('Task Completed!', msg);
-        // Remove from list
+        // Remove from active list
         setAiTasks(prev => prev.filter(t => t.title !== taskTitle));
+        // Refresh completed tasks history list
+        fetchCompletedTasks();
       }
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -110,9 +131,32 @@ export default function Wellness() {
 
   return (
     <ScreenWrapper>
-      <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60, flexGrow: 1 }}>
         
-        <Text className="text-3xl font-bold text-text-light dark:text-text-dark mb-6">How are you feeling?</Text>
+        {/* Header */}
+        <View className="mb-6">
+          <Text className="text-3xl font-bold text-text-light dark:text-text-dark mb-2">Wellness Hub</Text>
+          <Text className="text-gray-500 text-base">Check in, get AI tasks, and chat with your companion.</Text>
+        </View>
+
+        {/* AI Chat Companion Banner */}
+        <TouchableOpacity 
+          onPress={() => router.push('/ai-chat')}
+          className="bg-gradient-to-r from-primary to-secondary p-5 rounded-3xl mb-8 flex-row items-center justify-between shadow-sm"
+        >
+          <View className="flex-row items-center flex-1 pr-4">
+            <View className="w-12 h-12 bg-white/20 rounded-full items-center justify-center mr-4">
+              <Feather name="message-circle" size={24} color="white" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-white font-bold text-lg">Chat with Mindy</Text>
+              <Text className="text-white/80 text-xs mt-0.5">Your personalized, supportive AI companion is here to listen.</Text>
+            </View>
+          </View>
+          <Feather name="chevron-right" size={20} color="white" />
+        </TouchableOpacity>
+
+        <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">How are you feeling today?</Text>
 
         {/* Mood Selector */}
         <View className="flex-row flex-wrap justify-between mb-6">
@@ -168,6 +212,37 @@ export default function Wellness() {
             ))}
           </View>
         ) : null}
+
+        {/* Completed Task History */}
+        <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Recently Completed Tasks</Text>
+        <View className="bg-white dark:bg-surface-dark p-5 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm mb-4">
+          {completedTasks.length === 0 ? (
+            <Text className="text-gray-500 text-center py-4">No completed tasks yet. Log your mood to get recommendations!</Text>
+          ) : (
+            completedTasks.map((task, idx) => (
+              <View 
+                key={task.id} 
+                className={`flex-row justify-between items-center py-3.5 ${idx < completedTasks.length - 1 ? 'border-b border-gray-100 dark:border-gray-850' : ''}`}
+              >
+                <View className="flex-row items-center flex-1 pr-4">
+                  <View 
+                    className="w-7 h-7 rounded-full items-center justify-center mr-3 bg-green-500/10"
+                  >
+                    <Feather name="check-circle" size={16} color="#10B981" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-semibold text-text-light dark:text-text-dark text-sm" numberOfLines={1}>{task.task_title}</Text>
+                    <Text className="text-gray-400 text-[10px] mt-0.5">{new Date(task.created_at).toLocaleDateString()}</Text>
+                  </View>
+                </View>
+                <View className="items-end">
+                  <Text className="text-secondary font-bold text-xs">+{task.xp_awarded} XP</Text>
+                  <Text className="text-amber-500 font-bold text-[10px]">+{task.coins_awarded} M</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
 
       </ScrollView>
     </ScreenWrapper>

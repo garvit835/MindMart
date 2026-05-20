@@ -50,7 +50,7 @@ router.post('/analyze-behavior', async (req, res) => {
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
-      model: 'llama3-8b-8192',
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.2,
       response_format: { type: "json_object" }
     });
@@ -97,4 +97,56 @@ router.post('/recommend-marketplace', async (req, res) => {
   }
 });
 
+// POST /chat
+router.post('/chat', async (req, res) => {
+  try {
+    const { userId, messages } = req.body;
+    if (!userId || !messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'userId and messages array are required' });
+    }
+
+    // Format chat history for Groq
+    const formattedMessages = messages.map((m: any) => ({
+      role: m.role,
+      content: m.content
+    }));
+
+    // Inject system instructions if not present
+    const hasSystemInstruction = formattedMessages.some((m: any) => m.role === 'system');
+    if (!hasSystemInstruction) {
+      formattedMessages.unshift({
+        role: 'system',
+        content: `You are Mindy, an empathetic, supportive mental wellness AI companion.
+Your goal is to provide emotional support, active listening, mindfulness exercises, and wellness advice.
+Keep your responses relatively concise, warm, and conversational.
+If a user exhibits signs of severe distress or crisis (e.g. self-harm thoughts, extreme despair), gently encourage them to seek professional help and remind them of the resources available on their Insights page. Do not act as a replacement for professional therapy.`
+      });
+    }
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: formattedMessages,
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.7,
+      max_tokens: 500
+    });
+
+    const aiContent = chatCompletion.choices[0]?.message?.content;
+    if (!aiContent) throw new Error("Failed to generate response");
+
+    // Add activity log
+    await supabase.from('ai_activity_logs').insert([{
+      user_id: userId,
+      action_type: 'chat_message',
+      details: `Conversation step with user. Message length: ${messages[messages.length - 1]?.content?.length || 0}`
+    }]);
+
+    res.json({ success: true, message: aiContent });
+
+  } catch (error: any) {
+    console.error('Chat Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
+

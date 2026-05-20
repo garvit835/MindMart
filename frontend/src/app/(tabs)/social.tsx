@@ -38,7 +38,7 @@ export default function SocialFeed() {
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, []);
+  }, [user]);
 
   const fetchPosts = async () => {
     const { data } = await supabase
@@ -52,16 +52,18 @@ export default function SocialFeed() {
   };
 
   const fetchGroupsAndChallenges = async () => {
-    // Mock groups for the UI since creating them via admin UI isn't built yet
-    setGroups([
-      { id: '1', name: 'Meditation Masters', members: 124 },
-      { id: '2', name: 'Digital Detox', members: 89 },
-      { id: '3', name: 'Student Wellness', members: 210 }
-    ]);
-    setChallenges([
-      { id: '1', title: '7 Days of Gratitude', progress: 40 },
-      { id: '2', title: 'Daily Hydration', progress: 85 }
-    ]);
+    if (!user) return;
+    try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const [gRes, cRes] = await Promise.all([
+        axios.get(`${backendUrl}/api/social/groups?userId=${user.id}`),
+        axios.get(`${backendUrl}/api/social/challenges?userId=${user.id}`)
+      ]);
+      if (gRes.data?.success) setGroups(gRes.data.groups);
+      if (cRes.data?.success) setChallenges(cRes.data.challenges);
+    } catch (err) {
+      console.error("Error fetching social data:", err);
+    }
   };
 
   const submitPost = async () => {
@@ -87,17 +89,62 @@ export default function SocialFeed() {
   };
 
   const handleReaction = async (postId: string, reaction: string) => {
-    await supabase.from('post_reactions').insert([{
-      post_id: postId,
-      user_id: user?.id,
-      reaction_type: reaction
-    }]);
-    Alert.alert('Sent support! 🌿');
+    try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const response = await axios.post(`${backendUrl}/api/social/posts/react`, {
+        userId: user?.id,
+        postId,
+        reactionType: reaction
+      });
+      if (response.data.success) {
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return { ...p, reactions_count: response.data.count };
+          }
+          return p;
+        }));
+      }
+    } catch (error: any) {
+      console.error("Reaction error:", error);
+    }
+  };
+
+  const toggleGroupMembership = async (groupId: string, isJoined: boolean) => {
+    try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const endpoint = isJoined ? 'leave' : 'join';
+      const response = await axios.post(`${backendUrl}/api/social/groups/${endpoint}`, {
+        userId: user?.id,
+        groupId
+      });
+      if (response.data.success) {
+        Alert.alert("Success", isJoined ? "Left group successfully." : "Joined group successfully!");
+        fetchGroupsAndChallenges();
+      }
+    } catch (error: any) {
+      Alert.alert("Membership Error", error.message);
+    }
+  };
+
+  const joinChallenge = async (challengeId: string) => {
+    try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const response = await axios.post(`${backendUrl}/api/social/challenges/join`, {
+        userId: user?.id,
+        challengeId
+      });
+      if (response.data.success) {
+        Alert.alert("Success", "Joined challenge successfully!");
+        fetchGroupsAndChallenges();
+      }
+    } catch (error: any) {
+      Alert.alert("Challenge Error", error.message);
+    }
   };
 
   return (
     <ScreenWrapper>
-      <ScrollView contentContainerStyle={{ padding: 24 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }}>
         
         <View className="mb-6">
           <Text className="text-3xl font-bold text-text-light dark:text-text-dark mb-2">Community</Text>
@@ -157,13 +204,18 @@ export default function SocialFeed() {
                   </View>
                 </View>
                 <Text className="text-gray-600 dark:text-gray-300 leading-relaxed mb-4">{post.content}</Text>
-                <View className="flex-row items-center border-t border-gray-50 dark:border-gray-800 pt-3">
-                  <TouchableOpacity onPress={() => handleReaction(post.id, 'support')} className="bg-secondary/10 px-3 py-1.5 rounded-full mr-2">
-                    <Text className="text-secondary-dark font-medium">🙏 Support</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleReaction(post.id, 'inspired')} className="bg-amber-100 dark:bg-amber-900/30 px-3 py-1.5 rounded-full mr-2">
-                    <Text className="text-amber-600 font-medium">✨ Inspired</Text>
-                  </TouchableOpacity>
+                <View className="flex-row items-center justify-between border-t border-gray-50 dark:border-gray-800 pt-3">
+                  <View className="flex-row items-center">
+                    <TouchableOpacity onPress={() => handleReaction(post.id, 'support')} className="bg-secondary/10 px-3 py-1.5 rounded-full mr-2">
+                      <Text className="text-secondary-dark font-medium">🙏 Support</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleReaction(post.id, 'inspired')} className="bg-amber-100/60 dark:bg-amber-900/30 px-3 py-1.5 rounded-full mr-2">
+                      <Text className="text-amber-600 font-medium">✨ Inspired</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {post.reactions_count > 0 && (
+                    <Text className="text-xs text-gray-400 font-semibold">{post.reactions_count} reactions</Text>
+                  )}
                 </View>
               </View>
             ))}
@@ -177,20 +229,26 @@ export default function SocialFeed() {
             <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Find Your Tribe</Text>
             {groups.map(g => (
               <View key={g.id} className="bg-white dark:bg-surface-dark p-6 rounded-3xl mb-4 border border-gray-50 dark:border-gray-800 shadow-sm flex-row items-center justify-between">
-                <View className="flex-row items-center flex-1">
+                <View className="flex-row items-center flex-1 pr-4">
                   <View className="w-12 h-12 bg-primary/10 rounded-full items-center justify-center mr-4">
                     <Feather name="users" size={24} color="#2DD4BF" />
                   </View>
-                  <View>
-                    <Text className="font-bold text-text-light dark:text-text-dark text-lg">{g.name}</Text>
-                    <Text className="text-gray-500 text-sm">{g.members} members</Text>
+                  <View className="flex-1">
+                    <Text className="font-bold text-text-light dark:text-text-dark text-lg" numberOfLines={1}>{g.name}</Text>
+                    <Text className="text-gray-500 text-sm mt-0.5">{g.members} members</Text>
                   </View>
                 </View>
-                <TouchableOpacity className="bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-full">
-                  <Text className="font-bold text-text-light dark:text-text-dark">Join</Text>
+                <TouchableOpacity 
+                  onPress={() => toggleGroupMembership(g.id, g.isJoined)}
+                  className={`px-4 py-2 rounded-full ${g.isJoined ? 'bg-gray-200 dark:bg-gray-700' : 'bg-primary'}`}
+                >
+                  <Text className={`font-bold ${g.isJoined ? 'text-gray-600 dark:text-gray-300' : 'text-white'}`}>
+                    {g.isJoined ? 'Leave' : 'Join'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ))}
+            {groups.length === 0 && <Text className="text-gray-500 text-center py-10">No groups available.</Text>}
           </View>
         )}
 
@@ -201,20 +259,27 @@ export default function SocialFeed() {
             {challenges.map(c => (
               <View key={c.id} className="bg-gradient-to-r from-primary to-secondary p-6 rounded-3xl mb-4 shadow-sm">
                 <View className="flex-row justify-between items-center mb-4">
-                  <Text className="font-bold text-white text-xl">{c.title}</Text>
+                  <Text className="font-bold text-white text-xl flex-1 pr-4" numberOfLines={1}>{c.title}</Text>
                   <View className="bg-white/20 px-3 py-1 rounded-full">
                     <Text className="text-white font-medium text-xs">Active</Text>
                   </View>
                 </View>
-                <Text className="text-white/80 mb-2 font-medium">Community Progress</Text>
+                <Text className="text-white/80 mb-2 font-medium">Challenge Progress: {c.progress}%</Text>
                 <View className="h-2 w-full bg-black/20 rounded-full overflow-hidden">
                   <View className="h-full bg-white rounded-full" style={{ width: `${c.progress}%` }} />
                 </View>
-                <TouchableOpacity className="bg-white mt-4 py-3 rounded-xl items-center">
-                  <Text className="font-bold text-primary-dark">Participate</Text>
+                <TouchableOpacity 
+                  onPress={() => !c.isJoined && joinChallenge(c.id)}
+                  disabled={c.isJoined}
+                  className={`mt-4 py-3 rounded-xl items-center ${c.isJoined ? 'bg-white/40' : 'bg-white'}`}
+                >
+                  <Text className="font-bold text-primary-dark">
+                    {c.isJoined ? 'Joined ✔' : 'Participate'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ))}
+            {challenges.length === 0 && <Text className="text-gray-500 text-center py-10">No challenges available.</Text>}
           </View>
         )}
 

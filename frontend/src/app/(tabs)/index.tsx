@@ -11,12 +11,38 @@ export default function HomeDashboard() {
   const user = useAuthStore((state) => state.user);
   
   const [profile, setProfile] = useState<{ xp: number, level: number } | null>(null);
+  const [balance, setBalance] = useState(0);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchProfile = async () => {
     if (user?.id) {
+      // 1. Fetch Profile
       const { data } = await supabase.from('profiles').select('xp, level').eq('id', user.id).single();
       if (data) setProfile(data);
+
+      // 2. Fetch Wallet Balance
+      const { data: txs } = await supabase.from('reward_transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (txs) {
+        let calcBalance = 0;
+        txs.forEach(tx => {
+          if (tx.transaction_type === 'earned') calcBalance += tx.amount;
+          if (tx.transaction_type === 'spent') calcBalance -= tx.amount;
+        });
+        setBalance(calcBalance);
+      }
+
+      // 3. Fetch Recent Activities (completions + transactions combined)
+      const { data: completions } = await supabase.from('task_completions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
+      const combined: any[] = [];
+      if (completions) {
+        completions.forEach(c => combined.push({ ...c, type: 'completion' }));
+      }
+      if (txs) {
+        txs.slice(0, 3).forEach(tx => combined.push({ ...tx, type: 'transaction' }));
+      }
+      combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setRecentActivity(combined.slice(0, 4));
     }
   };
 
@@ -59,21 +85,38 @@ export default function HomeDashboard() {
           </TouchableOpacity>
         </View>
 
-        {/* Level & XP Progress Card */}
-        <View className="bg-white dark:bg-surface-dark p-5 rounded-2xl mb-8 border border-gray-100 dark:border-gray-800 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3">
-            <View className="flex-row items-center">
-              <Feather name="star" size={20} color="#F59E0B" />
-              <Text className="ml-2 font-bold text-lg text-text-light dark:text-text-dark">Level {level}</Text>
+        {/* Wellness Stats Row */}
+        <View className="flex-row justify-between mb-8">
+          {/* Level & XP Progress Card */}
+          <View className="flex-1 bg-white dark:bg-surface-dark p-5 rounded-2xl mr-2 border border-gray-100 dark:border-gray-800 shadow-sm justify-between">
+            <View className="flex-row justify-between items-center mb-2">
+              <View className="flex-row items-center">
+                <Feather name="star" size={18} color="#F59E0B" />
+                <Text className="ml-1.5 font-bold text-base text-text-light dark:text-text-dark">Level {level}</Text>
+              </View>
             </View>
-            <Text className="text-gray-500 text-sm font-medium">{xp} / {xpForNextLevel} XP</Text>
+            <Text className="text-gray-400 text-xs mb-2">{xp} / {xpForNextLevel} XP</Text>
+            <View className="h-2 w-full bg-gray-100 dark:bg-gray-850 rounded-full overflow-hidden">
+              <View 
+                className="h-full bg-amber-400 rounded-full" 
+                style={{ width: `${progressPercent}%` }} 
+              />
+            </View>
           </View>
-          <View className="h-3 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-            <View 
-              className="h-full bg-amber-400 rounded-full" 
-              style={{ width: `${progressPercent}%` }} 
-            />
-          </View>
+
+          {/* Wallet Coins Card */}
+          <TouchableOpacity 
+            className="flex-1 bg-white dark:bg-surface-dark p-5 rounded-2xl ml-2 border border-gray-100 dark:border-gray-800 shadow-sm justify-between"
+            onPress={() => router.push('/wallet')}
+          >
+            <View className="flex-row items-center">
+              <View className="w-6 h-6 rounded-full bg-amber-400 items-center justify-center mr-2">
+                <Text className="text-[10px] font-bold text-white">M</Text>
+              </View>
+              <Text className="font-bold text-base text-text-light dark:text-text-dark">MindCoins</Text>
+            </View>
+            <Text className="text-3xl font-extrabold text-primary-dark mt-2">{balance}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Daily Quote / Mood Card */}
@@ -89,7 +132,7 @@ export default function HomeDashboard() {
 
         {/* Quick Actions */}
         <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Quick Actions</Text>
-        <View className="flex-row justify-between flex-wrap">
+        <View className="flex-row justify-between flex-wrap mb-8">
           
           <TouchableOpacity 
             className="w-[48%] bg-white dark:bg-surface-dark p-5 rounded-2xl mb-4 shadow-sm border border-gray-100 dark:border-gray-800"
@@ -113,6 +156,45 @@ export default function HomeDashboard() {
             <Text className="text-gray-500 text-xs mt-1">Sustainable goods</Text>
           </TouchableOpacity>
 
+        </View>
+
+        {/* Recent Activity */}
+        <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Recent Activity</Text>
+        <View className="bg-white dark:bg-surface-dark p-5 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm mb-4">
+          {recentActivity.length === 0 ? (
+            <Text className="text-gray-500 text-center py-4">No recent activity. Start logging your mood or redeem rewards!</Text>
+          ) : (
+            recentActivity.map((activity, idx) => (
+              <View 
+                key={activity.id} 
+                className={`flex-row justify-between items-center py-3 ${idx < recentActivity.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''}`}
+              >
+                <View className="flex-row items-center flex-1 pr-4">
+                  <View 
+                    className="w-8 h-8 rounded-full items-center justify-center mr-3"
+                    style={{ backgroundColor: activity.type === 'completion' ? '#6366F120' : activity.transaction_type === 'earned' ? '#10B98120' : '#EF444420' }}
+                  >
+                    <Feather 
+                      name={activity.type === 'completion' ? 'check' : activity.transaction_type === 'earned' ? 'arrow-down-left' : 'arrow-up-right'} 
+                      size={14} 
+                      color={activity.type === 'completion' ? '#6366F1' : activity.transaction_type === 'earned' ? '#10B981' : '#EF4444'} 
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-semibold text-text-light dark:text-text-dark text-sm" numberOfLines={1}>
+                      {activity.type === 'completion' ? activity.task_title : activity.description}
+                    </Text>
+                    <Text className="text-gray-400 text-[10px] mt-0.5">
+                      {new Date(activity.created_at).toLocaleDateString()}
+                    </Text>
+                  </View>
+                </View>
+                <Text className={`font-bold text-sm ${activity.type === 'completion' ? 'text-secondary-dark' : activity.transaction_type === 'earned' ? 'text-green-500' : 'text-red-500'}`}>
+                  {activity.type === 'completion' ? `+${activity.xp_awarded} XP` : activity.transaction_type === 'earned' ? `+${activity.amount} M` : `-${activity.amount} M`}
+                </Text>
+              </View>
+            ))
+          )}
         </View>
 
       </ScrollView>

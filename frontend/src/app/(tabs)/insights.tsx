@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { Button } from '../../components/ui/Button';
@@ -12,11 +12,31 @@ export default function InsightsDashboard() {
   
   const [insight, setInsight] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
   const [crisisMode, setCrisisMode] = useState(false);
+  const [moodLogs, setMoodLogs] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchOrGenerateInsight();
+    const init = async () => {
+      await Promise.all([
+        fetchOrGenerateInsight(),
+        fetchMoodLogs()
+      ]);
+    };
+    init();
   }, []);
+
+  const fetchMoodLogs = async () => {
+    if (user?.id) {
+      const { data } = await supabase
+        .from('mood_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(7);
+      if (data) setMoodLogs(data);
+    }
+  };
 
   const fetchOrGenerateInsight = async () => {
     setLoading(true);
@@ -51,6 +71,35 @@ export default function InsightsDashboard() {
     }
   };
 
+  const recalculateInsight = async () => {
+    setRecalculating(true);
+    try {
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const response = await axios.post(`${backendUrl}/api/ai/analyze-behavior`, { userId: user?.id });
+      if (response.data.success) {
+        setInsight(response.data.insight);
+        setCrisisMode(response.data.crisis_mode);
+        Alert.alert("Success", "AI Insights recalculated successfully!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert("Failed to update", err.message);
+    }
+    setRecalculating(false);
+  };
+
+  // Helpers for chart
+  const averageMood = moodLogs.length > 0
+    ? (moodLogs.reduce((acc, log) => acc + log.mood_score, 0) / moodLogs.length).toFixed(1)
+    : 'N/A';
+
+  const getMoodEmoji = (score: number) => {
+    if (score <= 3) return '😢';
+    if (score <= 5) return '🥱';
+    if (score <= 7) return '😌';
+    return '🚀';
+  };
+
   if (loading) {
     return (
       <ScreenWrapper>
@@ -66,9 +115,22 @@ export default function InsightsDashboard() {
     <ScreenWrapper>
       <ScrollView contentContainerStyle={{ padding: 24 }}>
         
-        <View className="mb-8">
-          <Text className="text-3xl font-bold text-text-light dark:text-text-dark mb-2">AI Insights</Text>
-          <Text className="text-gray-500 text-base">Your personalized emotional growth journey.</Text>
+        <View className="mb-8 flex-row justify-between items-center">
+          <View className="flex-1 pr-4">
+            <Text className="text-3xl font-bold text-text-light dark:text-text-dark mb-2">AI Insights</Text>
+            <Text className="text-gray-500 text-base">Your personalized emotional growth journey.</Text>
+          </View>
+          <TouchableOpacity 
+            onPress={recalculateInsight}
+            disabled={recalculating}
+            className="w-12 h-12 bg-primary/20 rounded-full items-center justify-center"
+          >
+            {recalculating ? (
+              <ActivityIndicator size="small" color="#2DD4BF" />
+            ) : (
+              <Feather name="refresh-cw" size={20} color="#2DD4BF" />
+            )}
+          </TouchableOpacity>
         </View>
 
         {crisisMode && (
@@ -83,6 +145,41 @@ export default function InsightsDashboard() {
             <Button title="Connect with a Professional" onPress={() => {}} className="bg-red-500" />
           </View>
         )}
+
+        {/* Dynamic Mood History Chart */}
+        <View className="bg-white dark:bg-surface-dark p-6 rounded-3xl mb-8 border border-gray-100 dark:border-gray-800 shadow-sm">
+          <View className="flex-row justify-between items-center mb-6">
+            <Text className="text-lg font-bold text-text-light dark:text-text-dark">Mood History (7 Logs)</Text>
+            <View className="bg-primary/10 px-3 py-1 rounded-full">
+              <Text className="text-primary-dark font-semibold text-xs">Avg: {averageMood}/10</Text>
+            </View>
+          </View>
+
+          {moodLogs.length === 0 ? (
+            <Text className="text-gray-500 text-center py-6">No moods logged yet. Visit Wellness to log your mood.</Text>
+          ) : (
+            <View>
+              <View className="flex-row items-end justify-between h-40 pt-4 px-2">
+                {moodLogs.slice().reverse().map((log, idx) => (
+                  <View key={log.id || idx} className="items-center flex-1">
+                    <Text className="text-base mb-1.5">{getMoodEmoji(log.mood_score)}</Text>
+                    <View 
+                      className="w-7 bg-primary rounded-t-lg relative" 
+                      style={{ height: `${log.mood_score * 8}%`, minHeight: 6 }}
+                    >
+                      <View className="absolute -top-6 w-full items-center">
+                        <Text className="text-[10px] font-bold text-gray-500">{log.mood_score}</Text>
+                      </View>
+                    </View>
+                    <Text className="text-[8px] text-gray-400 mt-2 text-center" style={{ width: 45 }} numberOfLines={1}>
+                      {new Date(log.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
 
         {insight ? (
           <View>
