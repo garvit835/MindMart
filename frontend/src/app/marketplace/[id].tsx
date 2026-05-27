@@ -1,22 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
+import { useToastStore } from '../../store/toastStore';
 import axios from 'axios';
 
 export default function ProductDetails() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const user = useAuthStore(state => state.user);
+  const session = useAuthStore(state => state.session);
+  const showToast = useToastStore(state => state.showToast);
   
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
-
   const [balance, setBalance] = useState(0);
 
   useEffect(() => {
@@ -48,10 +50,10 @@ export default function ProductDetails() {
   }, [user]);
 
   const handleCheckout = async () => {
-    if (!user || !product) return;
+    if (!user || !product || !session) return;
     
     if (balance < product.price_in_mindcoins) {
-      Alert.alert("Insufficient Balance", `You need ${product.price_in_mindcoins - balance} more MindCoins to redeem this.`);
+      showToast(`You need ${product.price_in_mindcoins - balance} more MindCoins to redeem this.`, 'info');
       return;
     }
 
@@ -60,25 +62,27 @@ export default function ProductDetails() {
     try {
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       const response = await axios.post(`${backendUrl}/api/marketplace/checkout`, {
-        userId: user.id,
         items: [{
           productId: product.id,
           sellerId: product.seller_id,
           quantity: 1,
           priceInMindCoins: product.price_in_mindcoins
         }]
+      }, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
       if (response.data.success) {
-        Alert.alert(
-          "Redemption Successful! 🎉", 
-          `Your order has been placed. New Balance: ${response.data.newBalance} MindCoins`,
-          [{ text: "OK", onPress: () => router.back() }]
-        );
+        showToast(`Redemption Successful! New Balance: ${response.data.newBalance} M 🎉`, 'success');
+        setTimeout(() => {
+          router.back();
+        }, 1500);
       }
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message;
-      Alert.alert("Checkout Failed", msg);
+      showToast(msg || 'Checkout Failed', 'error');
     }
     setCheckingOut(false);
   };

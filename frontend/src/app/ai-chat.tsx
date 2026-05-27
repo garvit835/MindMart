@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ui/ScreenWrapper';
 import { useAuthStore } from '../store/authStore';
+import { useToastStore } from '../store/toastStore';
+import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 
 interface Message {
@@ -13,9 +15,13 @@ interface Message {
   timestamp: Date;
 }
 
+const STORAGE_KEY = 'mindmart_chat_history';
+
 export default function AiChat() {
   const router = useRouter();
   const user = useAuthStore(state => state.user);
+  const session = useAuthStore(state => state.session);
+  const showToast = useToastStore(state => state.showToast);
   
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -27,8 +33,37 @@ export default function AiChat() {
   ]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Load chat history on mount
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        let storedData = null;
+        if (Platform.OS === 'web') {
+          storedData = localStorage.getItem(STORAGE_KEY);
+        } else {
+          storedData = await SecureStore.getItemAsync(STORAGE_KEY);
+        }
+
+        if (storedData) {
+          const parsed = JSON.parse(storedData);
+          const formatted = parsed.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          }));
+          setMessages(formatted);
+        }
+      } catch (e) {
+        console.error('Error loading chat history:', e);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+    loadHistory();
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -40,8 +75,41 @@ export default function AiChat() {
     }, 100);
   };
 
+  const persistMessages = async (updatedMessages: Message[]) => {
+    try {
+      const serialized = JSON.stringify(updatedMessages);
+      if (Platform.OS === 'web') {
+        localStorage.setItem(STORAGE_KEY, serialized);
+      } else {
+        await SecureStore.setItemAsync(STORAGE_KEY, serialized);
+      }
+    } catch (e) {
+      console.error('Error saving chat history:', e);
+    }
+  };
+
+  const clearChat = async () => {
+    const initialWelcome: Message = {
+      id: 'welcome',
+      role: 'assistant',
+      content: "Hello! I'm Mindy, your AI wellness companion. I'm here to support you, listen when you need an ear, or help you find quiet moments. How are you feeling today?",
+      timestamp: new Date()
+    };
+    setMessages([initialWelcome]);
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(STORAGE_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+      }
+      showToast('Chat history cleared 💬', 'info');
+    } catch (e) {
+      console.error('Error clearing chat history:', e);
+    }
+  };
+
   const handleSend = async () => {
-    if (!inputText.trim() || sending || !user) return;
+    if (!inputText.trim() || sending || !user || !session) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -50,24 +118,26 @@ export default function AiChat() {
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    persistMessages(newMessages);
     setInputText('');
     setSending(true);
 
     try {
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
       
-      // We pass the conversation context to the server
-      const chatHistory = messages
-        .concat(userMessage)
-        .map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }));
+      const chatHistory = newMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
 
       const response = await axios.post(`${backendUrl}/api/ai/chat`, {
-        userId: user.id,
         messages: chatHistory
+      }, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
       if (response.data?.success) {
@@ -77,22 +147,37 @@ export default function AiChat() {
           content: response.data.message,
           timestamp: new Date()
         };
-        setMessages(prev => [...prev, botMessage]);
+        const finalMessages = [...newMessages, botMessage];
+        setMessages(finalMessages);
+        persistMessages(finalMessages);
       } else {
-        throw new Error("Invalid backend response");
+        throw new Error("Invalid response from server");
       }
     } catch (error: any) {
       console.error('Chat error:', error);
+      showToast('Failed to connect to companion server.', 'error');
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: "Oops! I encountered an error connecting to my wellness server. Please try again in a moment.",
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      const finalMessages = [...newMessages, errorMessage];
+      setMessages(finalMessages);
+      persistMessages(finalMessages);
     }
     setSending(false);
   };
+
+  if (loadingHistory) {
+    return (
+      <ScreenWrapper>
+        <View className="flex-1 items-center justify-center p-6">
+          <ActivityIndicator size="large" color="#2DD4BF" />
+        </View>
+      </ScreenWrapper>
+    );
+  }
 
   return (
     <ScreenWrapper>
@@ -102,22 +187,28 @@ export default function AiChat() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {/* Header */}
-        <View className="px-6 py-4 flex-row items-center border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-background-dark">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4">
-            <Feather name="arrow-left" size={24} color="#64748B" />
-          </TouchableOpacity>
-          
-          <View className="w-10 h-10 bg-primary/20 rounded-full items-center justify-center mr-3">
-            <Feather name="message-circle" size={22} color="#2DD4BF" />
-          </View>
-          
-          <View className="flex-1">
-            <Text className="text-lg font-bold text-text-light dark:text-text-dark">Mindy</Text>
-            <View className="flex-row items-center mt-0.5">
-              <View className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
-              <Text className="text-gray-400 text-xs font-medium">Companion AI</Text>
+        <View className="px-6 py-4 flex-row items-center border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-background-dark justify-between">
+          <View className="flex-row items-center flex-1">
+            <TouchableOpacity onPress={() => router.back()} className="mr-4">
+              <Feather name="arrow-left" size={24} color="#64748B" />
+            </TouchableOpacity>
+            
+            <View className="w-10 h-10 bg-primary/20 rounded-full items-center justify-center mr-3">
+              <Feather name="message-circle" size={22} color="#2DD4BF" />
+            </View>
+            
+            <View className="flex-1">
+              <Text className="text-lg font-bold text-text-light dark:text-text-dark">Mindy</Text>
+              <View className="flex-row items-center mt-0.5">
+                <View className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
+                <Text className="text-gray-400 text-xs font-medium">Companion AI</Text>
+              </View>
             </View>
           </View>
+          
+          <TouchableOpacity onPress={clearChat} className="p-2">
+            <Feather name="trash-2" size={20} color="#EF4444" />
+          </TouchableOpacity>
         </View>
 
         {/* Message List */}
@@ -195,7 +286,7 @@ export default function AiChat() {
             onChangeText={setInputText}
             onSubmitEditing={handleSend}
             multiline
-            maxHeight={100}
+            style={{ maxHeight: 100 }}
             className="flex-1 bg-gray-50 dark:bg-surface-dark border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-text-light dark:text-text-dark text-base mr-3"
           />
           

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function Register() {
   const [username, setUsername] = useState('');
@@ -32,8 +33,6 @@ export default function Register() {
     }
 
     if (data.user) {
-      // In a full implementation, we'd wait for trigger or insert username into profiles here.
-      // But since we have RLS on profiles to allow users to insert their own profile:
       const { error: profileError } = await supabase.from('profiles').insert([
         { id: data.user.id, username }
       ]);
@@ -42,7 +41,6 @@ export default function Register() {
         console.error('Profile creation error:', profileError.message);
       }
 
-      // Add a dynamic 100 MindCoin welcome bonus transaction
       const { error: welcomeTxError } = await supabase.from('reward_transactions').insert([
         {
           user_id: data.user.id,
@@ -63,60 +61,74 @@ export default function Register() {
   }
 
   return (
-    <ScreenWrapper>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#CCFBF1', '#F8FAFC', '#E0E7FF']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         className="flex-1"
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}>
-          <View className="mb-10">
-            <Text className="text-4xl font-bold text-text-light dark:text-text-dark mb-2">Join MindMart</Text>
-            <Text className="text-base text-gray-500 dark:text-gray-400">Start your mental wellness journey</Text>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 32 }}>
+          <View className="mb-12">
+            <Text className="text-5xl font-bold text-text-light mb-3 tracking-tight font-bold">Join MindMart</Text>
+            <Text className="text-lg text-text-muted font-medium">Start your mental wellness journey</Text>
           </View>
 
-          <Input
-            label="Username"
-            placeholder="wellness_guru"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-          />
+          <View className="bg-white/60 p-6 rounded-3xl shadow-sm border border-white/50">
+            <Input
+              label="Username"
+              placeholder="wellness_guru"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+            />
 
-          <Input
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+            <Input
+              label="Email"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
 
-          <Input
-            label="Password"
-            placeholder="••••••••"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+            <Input
+              label="Password"
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
 
-          <Button 
-            title="Create Account" 
-            onPress={signUpWithEmail} 
-            isLoading={loading} 
-            className="mt-4 mb-4"
-          />
+            <Button 
+              title="Create Account" 
+              onPress={signUpWithEmail} 
+              isLoading={loading} 
+              className="mt-6 mb-4 rounded-2xl h-14"
+            />
 
-          <View className="flex-row justify-center mt-6">
-            <Text className="text-gray-500 dark:text-gray-400">Already have an account? </Text>
-            <Text 
-              className="text-primary font-bold" 
-              onPress={() => router.push('/(auth)/login')}
-            >
-              Sign In
-            </Text>
+            <View className="flex-row justify-center mt-4">
+              <Text className="text-text-muted font-medium">Already have an account? </Text>
+              <Text 
+                className="text-primary-dark font-bold" 
+                onPress={() => router.push('/(auth)/login')}
+              >
+                Sign In
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </ScreenWrapper>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

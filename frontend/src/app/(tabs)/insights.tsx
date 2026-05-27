@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
+import { useToastStore } from '../../store/toastStore';
 import { supabase } from '../../lib/supabase';
 import axios from 'axios';
 
 export default function InsightsDashboard() {
   const user = useAuthStore(state => state.user);
+  const showToast = useToastStore(state => state.showToast);
   
   const [insight, setInsight] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [crisisMode, setCrisisMode] = useState(false);
   const [moodLogs, setMoodLogs] = useState<any[]>([]);
 
@@ -40,12 +43,13 @@ export default function InsightsDashboard() {
   };
 
   const fetchOrGenerateInsight = async () => {
+    if (!user?.id) return;
     setLoading(true);
     // Try fetch existing recent insight first
     const { data } = await supabase
       .from('behavioral_insights')
       .select('*')
-      .eq('user_id', user?.id)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1);
 
@@ -53,14 +57,19 @@ export default function InsightsDashboard() {
       setInsight(data[0]);
       
       // check crisis mode
-      const { data: profile } = await supabase.from('profiles').select('crisis_mode').eq('id', user?.id).single();
+      const { data: profile } = await supabase.from('profiles').select('crisis_mode').eq('id', user.id).single();
       setCrisisMode(profile?.crisis_mode || false);
       setLoading(false);
     } else {
       // Trigger AI Analysis
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-        const response = await axios.post(`${backendUrl}/api/ai/analyze-behavior`, { userId: user?.id });
+        const response = await axios.post(`${backendUrl}/api/ai/analyze-behavior`, { userId: user.id }, {
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`
+          }
+        });
         if (response.data.success) {
           setInsight(response.data.insight);
           setCrisisMode(response.data.crisis_mode);
@@ -73,20 +82,33 @@ export default function InsightsDashboard() {
   };
 
   const recalculateInsight = async () => {
+    if (!user?.id) return;
     setRecalculating(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-      const response = await axios.post(`${backendUrl}/api/ai/analyze-behavior`, { userId: user?.id });
+      const response = await axios.post(`${backendUrl}/api/ai/analyze-behavior`, { userId: user.id }, {
+        headers: { Authorization: `Bearer ${session?.access_token}` }
+      });
       if (response.data.success) {
         setInsight(response.data.insight);
         setCrisisMode(response.data.crisis_mode);
-        Alert.alert("Success", "AI Insights recalculated successfully!");
+        showToast("AI Insights recalculated successfully! ✨", "success");
       }
     } catch (err: any) {
       console.error(err);
-      Alert.alert("Failed to update", err.message);
+      showToast(err.message || "Failed to update insights", "error");
     }
     setRecalculating(false);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchOrGenerateInsight(),
+      fetchMoodLogs()
+    ]);
+    setRefreshing(false);
   };
 
   // Helpers for chart
@@ -114,7 +136,12 @@ export default function InsightsDashboard() {
 
   return (
     <ScreenWrapper>
-      <ScrollView contentContainerStyle={{ padding: 24 }}>
+      <ScrollView 
+        contentContainerStyle={{ padding: 24 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2DD4BF"]} tintColor="#2DD4BF" />
+        }
+      >
         
         <View className="mb-8 flex-row justify-between items-center">
           <View className="flex-1 pr-4">
@@ -140,10 +167,10 @@ export default function InsightsDashboard() {
               <Feather name="heart" size={24} color="#EF4444" />
               <Text className="ml-2 font-bold text-red-600 dark:text-red-400 text-lg">We are here for you.</Text>
             </View>
-            <Text className="text-red-800 dark:text-red-300 leading-relaxed mb-4">
+            <Text className="text-red-800 dark:text-red-300 leading-relaxed mb-4 font-medium">
               Our system noticed that you've been going through a really difficult time lately. MindMart is a great tool, but sometimes we all need a little extra human support.
             </Text>
-            <Button title="Connect with a Professional" onPress={() => {}} className="bg-red-500" />
+            <Button title="Connect with a Professional" onPress={() => {}} className="bg-red-500 rounded-2xl" />
           </View>
         )}
 
@@ -187,24 +214,24 @@ export default function InsightsDashboard() {
             <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Weekly Emotional Trend</Text>
             <View className="bg-primary/10 p-6 rounded-3xl mb-8 border border-primary/20">
               <Feather name="trending-up" size={24} color="#2DD4BF" className="mb-3" />
-              <Text className="text-text-light dark:text-text-dark text-lg font-medium leading-relaxed">
+              <Text className="text-text-light dark:text-text-dark text-lg font-semibold leading-relaxed">
                 {insight.emotional_trend}
               </Text>
             </View>
 
             <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Adaptive Action Plan</Text>
             {insight.personalized_plan?.map((step: string, idx: number) => (
-              <View key={idx} className="bg-white dark:bg-surface-dark p-5 rounded-2xl mb-3 shadow-sm border border-gray-100 dark:border-gray-800 flex-row">
-                <View className="w-8 h-8 rounded-full bg-secondary/20 items-center justify-center mr-4 mt-1">
+              <View key={idx} className="bg-white dark:bg-surface-dark p-5 rounded-3xl mb-3 shadow-sm border border-gray-100 dark:border-gray-800 flex-row items-center">
+                <View className="w-10 h-10 rounded-full bg-secondary/20 items-center justify-center mr-4">
                   <Text className="font-bold text-secondary-dark">{idx + 1}</Text>
                 </View>
-                <Text className="flex-1 text-text-light dark:text-text-dark text-base leading-relaxed">{step}</Text>
+                <Text className="flex-1 text-text-light dark:text-text-dark text-base font-medium leading-relaxed">{step}</Text>
               </View>
             ))}
           </View>
         ) : (
           <View className="bg-white dark:bg-surface-dark p-6 rounded-3xl border border-gray-100 dark:border-gray-800 items-center">
-            <Text className="text-gray-500 text-center">Not enough data to generate insights yet. Keep logging your moods and completing tasks!</Text>
+            <Text className="text-text-muted text-center font-medium">Not enough data to generate insights yet. Keep logging your moods and completing tasks!</Text>
           </View>
         )}
 

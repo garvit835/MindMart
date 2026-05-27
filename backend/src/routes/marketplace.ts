@@ -1,30 +1,31 @@
 import { Router } from 'express';
-import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { supabaseAdmin } from '../supabase';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 
 dotenv.config();
 
 const router = Router();
-const supabaseUrl = process.env.SUPABASE_URL || '';
-// In a real app we need a service_role key to bypass RLS for transactions
-const supabaseKey = process.env.SUPABASE_ANON_KEY || ''; 
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Apply auth middleware
+router.use(requireAuth);
 
 // POST Fake Checkout Flow using MindCoins
-router.post('/checkout', async (req, res) => {
+router.post('/checkout', async (req: AuthenticatedRequest, res) => {
   try {
-    const { userId, items } = req.body;
+    const userId = req.user.id;
+    const { items } = req.body;
     // items = [{ productId, sellerId, quantity, priceInMindCoins }]
 
-    if (!userId || !items || items.length === 0) {
-      return res.status(400).json({ error: 'userId and items are required' });
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: 'items are required' });
     }
 
     // Calculate total cost
     const totalCost = items.reduce((acc: number, item: any) => acc + (item.priceInMindCoins * item.quantity), 0);
 
     // 1. Verify User Balance (Sum of earned minus sum of spent from reward_transactions)
-    const { data: transactions, error: txError } = await supabase
+    const { data: transactions, error: txError } = await supabaseAdmin
       .from('reward_transactions')
       .select('amount, transaction_type')
       .eq('user_id', userId);
@@ -43,15 +44,15 @@ router.post('/checkout', async (req, res) => {
 
     // 2. Deduct Stock for all products
     for (const item of items) {
-      const { data: product } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+      const { data: product } = await supabaseAdmin.from('products').select('stock').eq('id', item.productId).single();
       if (!product || product.stock < item.quantity) {
         return res.status(400).json({ error: `Product ${item.productId} is out of stock.` });
       }
-      await supabase.from('products').update({ stock: product.stock - item.quantity }).eq('id', item.productId);
+      await supabaseAdmin.from('products').update({ stock: product.stock - item.quantity }).eq('id', item.productId);
     }
 
     // 3. Create Order
-    const { data: order, error: orderError } = await supabase.from('orders').insert([{
+    const { data: order, error: orderError } = await supabaseAdmin.from('orders').insert([{
       buyer_id: userId,
       total_cost_coins: totalCost,
       status: 'processing'
@@ -68,10 +69,10 @@ router.post('/checkout', async (req, res) => {
       price_at_time: item.priceInMindCoins
     }));
 
-    await supabase.from('order_items').insert(orderItemsToInsert);
+    await supabaseAdmin.from('order_items').insert(orderItemsToInsert);
 
     // 5. Log Wallet Transaction
-    await supabase.from('reward_transactions').insert([{
+    await supabaseAdmin.from('reward_transactions').insert([{
       user_id: userId,
       amount: totalCost,
       transaction_type: 'spent',
