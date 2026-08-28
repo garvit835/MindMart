@@ -10,16 +10,29 @@ interface ToastState {
   hideToast: () => void;
 }
 
+let toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
 export const useToastStore = create<ToastState>((set) => ({
   visible: false,
   message: '',
   type: 'info',
   showToast: (message, type = 'info') => {
+    // Clear any existing timeout to prevent premature dismissal
+    if (toastTimeoutId) {
+      clearTimeout(toastTimeoutId);
+    }
     set({ visible: true, message, type });
     // Auto-dismiss toast after 4 seconds
-    setTimeout(() => {
+    toastTimeoutId = setTimeout(() => {
       set({ visible: false });
+      toastTimeoutId = null;
     }, 4000);
   },
-  hideToast: () => set({ visible: false }),
+  hideToast: () => {
+    if (toastTimeoutId) {
+      clearTimeout(toastTimeoutId);
+      toastTimeoutId = null;
+    }
+    set({ visible: false });
+  },
 }));

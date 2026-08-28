@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ui/ScreenWrapper';
 import { useAuthStore } from '../store/authStore';
 import { useToastStore } from '../store/toastStore';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 interface Message {
@@ -41,12 +41,7 @@ export default function AiChat() {
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        let storedData = null;
-        if (Platform.OS === 'web') {
-          storedData = localStorage.getItem(STORAGE_KEY);
-        } else {
-          storedData = await SecureStore.getItemAsync(STORAGE_KEY);
-        }
+        const storedData = await AsyncStorage.getItem(STORAGE_KEY);
 
         if (storedData) {
           const parsed = JSON.parse(storedData);
@@ -78,11 +73,7 @@ export default function AiChat() {
   const persistMessages = async (updatedMessages: Message[]) => {
     try {
       const serialized = JSON.stringify(updatedMessages);
-      if (Platform.OS === 'web') {
-        localStorage.setItem(STORAGE_KEY, serialized);
-      } else {
-        await SecureStore.setItemAsync(STORAGE_KEY, serialized);
-      }
+      await AsyncStorage.setItem(STORAGE_KEY, serialized);
     } catch (e) {
       console.error('Error saving chat history:', e);
     }
@@ -97,11 +88,7 @@ export default function AiChat() {
     };
     setMessages([initialWelcome]);
     try {
-      if (Platform.OS === 'web') {
-        localStorage.removeItem(STORAGE_KEY);
-      } else {
-        await SecureStore.deleteItemAsync(STORAGE_KEY);
-      }
+      await AsyncStorage.removeItem(STORAGE_KEY);
       showToast('Chat history cleared 💬', 'info');
     } catch (e) {
       console.error('Error clearing chat history:', e);

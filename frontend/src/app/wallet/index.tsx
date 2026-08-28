@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function WalletDashboard() {
   const router = useRouter();
@@ -49,14 +50,21 @@ export default function WalletDashboard() {
         </View>
 
         {/* Balance Card */}
-        <View className="bg-gradient-to-r from-primary to-secondary p-8 rounded-3xl mb-8 shadow-sm">
-          <Text className="text-white/80 font-medium mb-2">Available MindCoins</Text>
-          <View className="flex-row items-center">
-            <View className="w-8 h-8 rounded-full bg-amber-400 mr-3 items-center justify-center border-2 border-white/20">
-              <Text className="text-sm font-bold text-white">M</Text>
+        <View className="rounded-3xl overflow-hidden mb-8 shadow-sm">
+          <LinearGradient
+            colors={['#2DD4BF', '#6366F1']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            className="p-8"
+          >
+            <Text className="text-white/80 font-medium mb-2">Available MindCoins</Text>
+            <View className="flex-row items-center">
+              <View className="w-8 h-8 rounded-full bg-amber-400 mr-3 items-center justify-center border-2 border-white/20">
+                <Text className="text-sm font-bold text-white">M</Text>
+              </View>
+              <Text className="text-5xl font-bold text-white">{balance}</Text>
             </View>
-            <Text className="text-5xl font-bold text-white">{balance}</Text>
-          </View>
+          </LinearGradient>
         </View>
 
         <Text className="text-xl font-bold text-text-light dark:text-text-dark mb-4">Transaction History</Text>

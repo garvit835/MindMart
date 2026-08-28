@@ -34,8 +34,27 @@ export default function SocialFeed() {
     const subscription = supabase
       .channel('public:social_posts')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'social_posts' }, payload => {
+        // Only show posts that are already active (skip pending_review)
         if (payload.new.status === 'active') {
           setPosts(prev => [payload.new, ...prev]);
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'social_posts' }, payload => {
+        // Handle moderation status changes (pending_review -> active/rejected)
+        if (payload.new.status === 'active') {
+          setPosts(prev => {
+            const exists = prev.some(p => p.id === payload.new.id);
+            if (exists) {
+              // Update existing post
+              return prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p);
+            } else {
+              // Post was just approved — add to feed
+              return [payload.new, ...prev];
+            }
+          });
+        } else if (payload.new.status === 'rejected') {
+          // Remove rejected posts from feed
+          setPosts(prev => prev.filter(p => p.id !== payload.new.id));
         }
       })
       .subscribe();

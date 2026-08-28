@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import Groq from 'groq-sdk';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import { supabaseAdmin, getUserClient } from '../supabase';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 
@@ -180,6 +180,9 @@ router.post('/challenges/join', async (req: AuthenticatedRequest, res) => {
 });
 
 // POST /posts/react
+// TODO: The reactions_count update is a non-atomic read-modify-write.
+// Concurrent reactions can produce incorrect counts. For production, use a
+// Supabase RPC like: SELECT increment_reactions(post_id, delta) to atomically update.
 router.post('/posts/react', async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user.id;

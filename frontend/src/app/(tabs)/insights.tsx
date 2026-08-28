@@ -200,7 +200,7 @@ export default function InsightsDashboard() {
                       </View>
                     </View>
                     <Text className="text-[8px] text-gray-400 mt-2 text-center" style={{ width: 45 }} numberOfLines={1}>
-                      {new Date(log.logged_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      {new Date(log.logged_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </Text>
                   </View>
                 ))}

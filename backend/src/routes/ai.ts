@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import Groq from 'groq-sdk';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import { supabaseAdmin, getUserClient } from '../supabase';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 

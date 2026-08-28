@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
+import * as dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -15,10 +14,6 @@ import wellnessRoutes from './routes/wellness';
 import marketplaceRoutes from './routes/marketplace';
 import socialRoutes from './routes/social';
 import aiRoutes from './routes/ai';
-
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 app.use('/api/wellness', wellnessRoutes);
 app.use('/api/marketplace', marketplaceRoutes);

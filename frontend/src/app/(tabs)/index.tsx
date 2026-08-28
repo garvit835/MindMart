@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -29,7 +29,7 @@ export default function HomeDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [dailyQuote, setDailyQuote] = useState('');
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (user?.id) {
       try {
         // 1. Fetch Profile
@@ -68,13 +68,13 @@ export default function HomeDashboard() {
         showToast(err.message || 'Error updating dashboard details', 'error');
       }
     }
-  };
+  }, [user?.id, showToast]);
 
   useEffect(() => {
     fetchProfile();
     const day = new Date().getDate();
     setDailyQuote(INSPIRATIONAL_QUOTES[day % INSPIRATIONAL_QUOTES.length]);
-  }, [user]);
+  }, [fetchProfile]);
 
   const onRefresh = async () => {
     setRefreshing(true);

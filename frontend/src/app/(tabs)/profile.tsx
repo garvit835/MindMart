@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ScreenWrapper } from '../../components/ui/ScreenWrapper';
@@ -15,7 +15,7 @@ export default function Profile() {
   const [moodLogs, setMoodLogs] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchProfileData = async () => {
+  const fetchProfileData = useCallback(async () => {
     if (!user) return;
     
     // Fetch XP & Level
@@ -25,11 +25,11 @@ export default function Profile() {
     // Fetch Mood History for basic analytics
     const { data: mData } = await supabase.from('mood_logs').select('mood_score, logged_at').eq('user_id', user.id).order('logged_at', { ascending: false }).limit(7);
     if (mData) setMoodLogs(mData);
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     fetchProfileData();
-  }, [user]);
+  }, [fetchProfileData]);
 
   const onRefresh = async () => {
     setRefreshing(true);

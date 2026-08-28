@@ -1,3 +1,7 @@
 node_modules
 dist
-.env
+
+# Environment files (all directories)
+**/.env
+**/.env.*
+!**/.env.example

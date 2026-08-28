@@ -1,10 +1,21 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useColorScheme, Platform, View } from 'react-native';
+import { useEffect } from 'react';
+import { useAuthStore } from '../../store/authStore';
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const router = useRouter();
+  const user = useAuthStore(state => state.user);
+
+  // Redirect unauthenticated users to login
+  useEffect(() => {
+    if (user === null) {
+      router.replace('/(auth)/login');
+    }
+  }, [user]);
 
   return (
     <Tabs

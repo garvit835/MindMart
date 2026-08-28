@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import Groq from 'groq-sdk';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import { supabaseAdmin, getUserClient } from '../supabase';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 
@@ -27,16 +27,6 @@ router.post('/recommend', async (req: AuthenticatedRequest, res) => {
     {
       "message": "A short comforting message (max 2 sentences)",
       "tasks": [
-        { "title": "Task 1 title", "description": "Short description" }
-      ]
-    }`;
-
-    // Note: prompt asks for 3, example shows 1 structure. We'll stick to the original logic
-    const detailedPrompt = `You are a compassionate, non-toxic AI mental wellness guide. The user is currently feeling "${currentMood}" and noted: "${notes || 'none'}". Generate 3 short, personalized wellness tasks to help them, and a short supportive message. 
-    Format your response EXACTLY as valid JSON with the following structure:
-    {
-      "message": "A short comforting message (max 2 sentences)",
-      "tasks": [
         { "title": "Task 1 title", "description": "Short description" },
         { "title": "Task 2 title", "description": "Short description" },
         { "title": "Task 3 title", "description": "Short description" }
@@ -44,7 +34,7 @@ router.post('/recommend', async (req: AuthenticatedRequest, res) => {
     }`;
 
     const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: 'user', content: detailedPrompt }],
+      messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.3-70b-versatile',
       temperature: 0.5,
       response_format: { type: "json_object" }
@@ -124,8 +114,8 @@ router.post('/complete', async (req: AuthenticatedRequest, res) => {
     let currentLevel = profile?.level || 1;
     let levelUp = false;
 
-    // Simple level progression: 200 XP per level
-    if (newXp >= currentLevel * 200) {
+    // Simple level progression: 200 XP per level (while loop handles multi-level jumps)
+    while (newXp >= currentLevel * 200) {
       currentLevel += 1;
       levelUp = true;
     }
